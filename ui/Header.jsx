@@ -4,9 +4,11 @@ import Link from "next/link";
 import { SignedIn, SignedOut,SignInButton,UserButton } from "@clerk/nextjs";
 import { ArrowBigLeft, CarFront, CarFrontIcon, Heart, HeartIcon, Layout } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { checkUser } from "@/lib/checkUser";
 
-const Header = async ({isAdminPage= true}) => {
-  const isAdmin = false;
+const Header = async ({isAdminPage= false}) => {
+  const user = await checkUser();
+  const isAdmin = user?.role==="ADMIN";
   return (
   <header className="fixed top-0 w-full bg-white/80 backdrop-blur-md z-50 border-b">
     <nav className="flex items-center justify-between p-4">
