@@ -1,5 +1,5 @@
 "use client";
-import React, { use, useState } from "react";
+import React, { useState } from "react";
 import { Input } from "./ui/input";
 import { Camera, Upload } from "lucide-react";
 import { Button } from "./ui/button";
@@ -14,27 +14,31 @@ const HomeSearch = () => {
   const [searchImage, setSearchImage] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const router = useRouter();
 
-  const router = useRouter()
   const handleImageSearch = async (e) => {
     e.preventDefault();
-    if(!searchImage){
-      toast.error("Please you need to upload an image")
-      return;}
-    
+    if (!searchImage) {
+      toast.error("Please you need to upload an image");
+      return;
+    }
+    // Add your image search logic here
   };
+
   const handleTextSubmit = (e) => {
     e.preventDefault();
-    if(!searchTerm.trim()){
-      toast.error("Please enter a search term")
-      return;}
-    router.push(`/cars?search=${encodeURIComponent(searchTerm)}`)
-   };
+    if (!searchTerm.trim()) {
+      toast.error("Please enter a search term");
+      return;
+    }
+    router.push(`/cars?search=${encodeURIComponent(searchTerm)}`);
+  };
+
   const onDrop = (acceptedFiles) => {
     const file = acceptedFiles[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image size should be less than 5mb")
+        toast.error("Image size should be less than 5mb");
         return;
       }
       setIsUploading(true);
@@ -43,23 +47,23 @@ const HomeSearch = () => {
       fileReader.onloadend = () => {
         setImagePreview(fileReader.result);
         setIsUploading(false);
-        toast.success("Image uploaded successfully")
+        toast.success("Image uploaded successfully");
       };
       fileReader.onerror = () => {
         setIsUploading(false);
-        toast.error("Something went wrong")
+        toast.error("Something went wrong");
       };
       fileReader.readAsDataURL(file);
     }
   };
-  const { getRootProps, getInputProps, isDragActive, isDragReject } =
-    useDropzone({
-      onDrop,
-      accept: {
-        "image/*": [".jpg", ".jpeg", ".png", ".gif"],
-      },
-      maxFiles: 1,
-    });
+
+  const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
+    onDrop,
+    accept: {
+      "image/*": [".jpg", ".jpeg", ".png", ".gif"],
+    },
+    maxFiles: 1,
+  });
 
   return (
     <div>
@@ -80,10 +84,7 @@ const HomeSearch = () => {
                 isImageSearchActive ? "bg-black text-white" : ""
               }`}
             />
-            <Button
-              type="submit"
-              className="bg-black text-white rounded-full px-4 py-2"
-            >
+            <Button type="submit" className="bg-black text-white rounded-full px-4 py-2">
               Search
             </Button>
           </div>
@@ -95,52 +96,36 @@ const HomeSearch = () => {
           <form onSubmit={handleImageSearch}>
             <div className="border-2 border-dashed border-blue-300 rounded-md p-6 ">
               {imagePreview ? (
-                <div className="mb-2 flex flex-col items-center justify-center space-y-2 w-full max-w-[90%] mx-auto">
+                <div>
                   <img
                     src={imagePreview}
-                    alt="Preview"
-                   className="w-60 h-50 object-cover rounded-md"
+                    alt="car preview"
+                    className="max-h-56 max-w-full object-contain mb-4"
                   />
-                  <Button
-                     variant={"outline"}
-                     onClick={() => {
-                       setImagePreview("");
-                       setSearchImage(null);
-                       toast.info("Image removed")
-                     }}>
-                    remove Image
-                  </Button>
                 </div>
               ) : (
-                <div
-                  {...getRootProps()} 
-                
-                >
+                <div {...getRootProps()}>
                   <input {...getInputProps()} />
                   <div className="flex flex-col items-center">
-
-                  <Upload className="w-12 h-12 text-gray-400 mb-2" />
-                  <p className="text-center text-gray-700">
-                    {isDragActive && !isDragReject
-                      ? "Drop the image here..."
-                      : "Drag and drop a car image or click to select one"}
-                  </p>
-                  {isDragReject && (
-                    <p className="text-red-500 mt-2">File type not supported</p>
-                  )}
-                  <p className="text-gray-400 text-sm mt-2">
-                    Supported formats: .jpg, .jpeg, .png (max 5MB)
-                  </p>
+                    <Upload className="w-12 h-12 text-gray-400 mb-2" />
+                    <p className="text-center text-gray-700">
+                      {isDragActive && !isDragReject
+                        ? "Drop the image here..."
+                        : "Drag and drop a car image or click to select one"}
+                    </p>
+                    {isDragReject && <p className="text-red-500 mt-2">File type not supported</p>}
+                    <p className="text-gray-400 text-sm mt-2">
+                      Supported formats: .jpg, .jpeg, .png (max 5MB)
+                    </p>
                   </div>
                 </div>
               )}
             </div>
-            {imagePreview && <Button
-             type="submit"
-             className={"w-full"}
-             disabled={isUploading}
-             >{isUploading?"uploading...":"Search with this image"}</Button>}
-
+            {imagePreview && (
+              <Button type="submit" className="w-full" disabled={isUploading}>
+                {isUploading ? "uploading..." : "Search with this image"}
+              </Button>
+            )}
           </form>
         </div>
       )}

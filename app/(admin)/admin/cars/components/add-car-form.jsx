@@ -1,6 +1,6 @@
 "use client";
-import React, { useState } from "react";
-import { get, useForm } from "react-hook-form";
+import React, { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import Image from "next/image";
 import { toast } from "sonner";
@@ -24,14 +24,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Upload, X } from "lucide-react";
+import { Camera, Loader2, Upload, X } from "lucide-react";
 import { Watch } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
+import UseFetch from "@/hooks/use-fetch";
+import { addCar } from "@/actions/cars";
+import { add } from "date-fns";
+import { Router } from "next/router";
 const fuelType = ["Petrol", "Diesel", "Electric", "Hybrid", "Plug-in Hybrid"];
 const transmissionType = ["Automatic", "Manual", "Semi-automatic"];
 
-const bodyTypes = [
+const bodyType = [
   "SUV",
   "Sedan",
   "Hatchback",
@@ -46,6 +50,8 @@ const AddCarform = () => {
   const [activeTab, setActiveTab] = useState("ai");
   const [uploadedImages, setUploadedImages] = useState([]);
   const [imageError, setImageError] = useState("");
+  const [imagePreviews, setImagePreviews] = useState(null);
+  const [uploadedAiImages, setUploadedAiImages] = useState(null);
 
   const carFormSchema = z.object({
     make: z.string().min(1, "Make is required"),
@@ -93,12 +99,65 @@ const AddCarform = () => {
       featured: false,
     },
   });
-
+  const onAiDrop = (acceptedFiles) => {
+    const file = acceptedFiles[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size should be less than 5mb")
+        return;
+      }
+      setUploadedAiImages(true);
+      
+      const fileReader = new FileReader();
+      fileReader.onloadend = (e) => {
+        setImagePreviews(e.target.result);
+        toast.success("Image uploaded successfully")
+      };
+      
+      fileReader.readAsDataURL(file);
+    }
+  };
+    const {
+    getRootProps: getAiRootProps,
+    getInputProps: getAiInputProps,
+  } = useDropzone({
+    onDrop: onAiDrop,
+    accept: {
+      "image/*": [".jpg", ".jpeg", ".png", ".gif", ".webp"],
+    },
+    multiple: false,
+    maxFiles:1,
+  });
+   const { data:addCarResult,loading:addCarLoading,fn:addCarFn } = UseFetch(addCar)
+   useEffect(()=>{
+    if(addCarResult?.success){
+      toast.success("Car added successfully");
+      Router.push("/admin/cars")
+    }
+   },[addCarResult,addCarLoading])
   const onSubmit = async (data) => {
-    if (uploadedImages.length == 0) {
+    console.log("Form data:", data);
+    console.log("Uploaded images:", uploadedImages);
+
+    if (uploadedImages.length === 0) {
       setImageError("Please upload at least one image");
       return;
     }
+
+    const carData = {
+      ...data,
+      year: parseInt(data.year),
+      price: parseInt(data.price),
+      mileage: parseInt(data.mileage),
+      seats:data.seats?parseInt(data.seats):null,
+      images: uploadedImages,
+    }
+    await addCarFn({
+      carData,
+      images:uploadedImages,
+    })
+
+    
   };
 
   const onMultiImageInputDrop = (acceptedFiles) => {
@@ -304,6 +363,34 @@ const AddCarform = () => {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/*Body Type */}
+                <div className="space-y-2">
+                  <Label htmlFor="bodyType">Body Type</Label>
+                  <Select
+                    onValueChange={(value) => setValue("bodyType", value)}
+                    defaultValue={getValues("bodyType")}
+                  >
+                    <SelectTrigger
+                      className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 ${
+                        errors.bodyType ? "border-red-500" : "border-gray-300"
+                      }`}
+                    >
+                      <SelectValue placeholder="Select body type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bodyType.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.bodyType && (
+                    <p className="text-sm text-red-500">
+                      {errors.bodyType.message}
+                    </p>
+                  )}
+                </div>
                 {/* Transmission */}
                 <div className="space-y-2">
                   <Label htmlFor="transmission">Transmission</Label>
@@ -404,7 +491,7 @@ const AddCarform = () => {
 
               <div className="flex items-start space-x-3 space-y-0 rounded-md border p-4">
                 <Checkbox
-                  id
+                  id="featured"
                   checked={watch("featured")}
                   onCheckedChange={(value) => setValue("featured", value)}
                 />
@@ -462,7 +549,7 @@ const AddCarform = () => {
                         variant={"destructive"}
                         className={"absolute top-2 right-2 bg-white/90 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity " } 
                         onClick={() => removeImage(index)}
-                        ><X className="h-4 w-4`"/></Button>
+                        ><X className="h-4 w-4" /></Button>
                       </div>
 })}
                   </div>
@@ -470,8 +557,8 @@ const AddCarform = () => {
               )}
 
 
-             <Button type="submit" className="w-full md:w-auto">
-               {true ? (
+             <Button type="submit" className="w-full md:w-auto" disabled={addCarLoading}>
+               {addCarLoading ? (
                  <>
                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                    Adding car...
@@ -482,6 +569,26 @@ const AddCarform = () => {
              </Button>
             </form>
           </CardContent>
+        </Card>
+      </TabsContent>
+      <TabsContent value="ai" className="mt-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>AI-Powered Car Details Extraction</CardTitle>
+            <CardDescription>Upload an image of a car and let AI extract details</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <div>
+                  
+                </div>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <p>Card Footer</p>
+          </CardFooter>
         </Card>
       </TabsContent>
     </Tabs>

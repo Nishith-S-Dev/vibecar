@@ -39,7 +39,7 @@ model Car {
   make             String
   model            String
   year             Int
-  price            Decimal            @db.Decimal(10, 2)
+  price            Decimal            @db.Decimal(15, 2)
   mileage          Int
   color            String
   fuelType         String

@@ -1,7 +1,11 @@
+"use server"
 import { db } from "@/lib/prisma";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { cookies } from "next/headers";
+
 import { createClient } from "@supabase/supabase-js";
+import { v4 as uuidv4 } from "uuid";
+import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 async function fileToBase64(file) {
     const bytes = await file.arrayBuffer();
@@ -110,8 +114,23 @@ export async function addCar({carData,images}){
         if(!user) throw new Error("User not found");
         const carId = uuidv4();
         const folderpath = `/cars/${carId}`;
-        const cookieStore = await cookies()
-        const supabase = createClient(cookieStore);
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        );
+
+        // Ensure bucket exists
+        const bucketName = "cars-images";
+        const { data: bucketList, error: bucketError } = await supabase.storage.listBuckets();
+        if (bucketError) {
+            console.error("Error fetching bucket list:", bucketError);
+            throw new Error("Error checking storage buckets: " + bucketError.message);
+        }
+        const bucketExists = bucketList.some(bucket => bucket.name === bucketName);
+        if (!bucketExists) {
+            throw new Error(`Bucket "${bucketName}" not found. Please create it in Supabase Dashboard.`);
+        }
+
         const imageUrls =[];
 
         for(let i=0;i<images.length;i++)
@@ -131,13 +150,13 @@ export async function addCar({carData,images}){
 
             const fileName = `image-${Date.now()}-${i}.${fileExtension}`;
             const filePath = `${folderpath}/${fileName}`;
-            const {data,error} = await supabase.storage.from("cars-images").upload(filePath,imageBuffer,{contentType:`image/${fileExtension}`});
+            const { data, error } = await supabase.storage.from(bucketName).upload(filePath, imageBuffer, { contentType: `image/${fileExtension}` });
           if(error)
           {
             console.error("Error uploading image:",error);
             throw new Error(`Error uploading image: ${error.message}`);
           }
-          const publicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cars-images/${filePath}`;
+          const publicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucketName}/${filePath}`;
           imageUrls.push(publicUrl);
         }
         if(imageUrls.length===0)
