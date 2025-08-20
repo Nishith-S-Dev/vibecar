@@ -10,12 +10,10 @@ import {
   CardHeader,
   CardContent,
   CardDescription,
-  CardFooter,
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label"; // ✅ correct import
-import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -24,17 +22,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Camera, Loader2, Upload, X } from "lucide-react";
-import { Watch } from "lucide-react";
+import { Loader2, Upload, X } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import UseFetch from "@/hooks/use-fetch";
-import { addCar } from "@/actions/cars";
-import { add } from "date-fns";
-import { Router } from "next/router";
+import { addCar, processCarImageWithAI } from "@/actions/cars";
+import { useRouter } from "next/navigation";
+
 const fuelType = ["Petrol", "Diesel", "Electric", "Hybrid", "Plug-in Hybrid"];
 const transmissionType = ["Automatic", "Manual", "Semi-automatic"];
-
 const bodyType = [
   "SUV",
   "Sedan",
@@ -46,6 +42,32 @@ const bodyType = [
 ];
 const carStatus = ["Available", "Unavailable", "Sold"];
 
+const carFormSchema = z.object({
+  make: z.string().min(1, "Make is required"),
+  model: z.string().min(1, "Model is required"),
+  year: z
+    .string()
+    .refine(
+      (value) => {
+        const year = parseInt(value);
+        return (
+          !isNaN(year) && year >= 1900 && year <= new Date().getFullYear() + 1
+        );
+      },
+      { message: "Valid year is required" }
+    ),
+  price: z.string().min(1, "Price is required"),
+  mileage: z.string().min(1, "Mileage is required"),
+  color: z.string().min(1, "Color is required"),
+  fuelType: z.string().min(1, "Fuel type is required"),
+  transmission: z.string().min(1, "Transmission type is required"),
+  bodyType: z.string().min(1, "Body type is required"),
+  seats: z.string().optional(),
+  description: z.string().min(10, "Description is required"),
+  status: z.enum(["Available", "Unavailable", "Sold"]).default("Available"),
+  featured: z.boolean().default(false),
+});
+
 const AddCarform = () => {
   const [activeTab, setActiveTab] = useState("ai");
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -53,31 +75,11 @@ const AddCarform = () => {
   const [imagePreviews, setImagePreviews] = useState(null);
   const [uploadedAiImages, setUploadedAiImages] = useState(null);
 
-  const carFormSchema = z.object({
-    make: z.string().min(1, "Make is required"),
-    model: z.string().min(1, "Model is required"),
-    year: z.string().refine((value) => {
-      const year = parseInt(value);
-      return (
-        !isNaN(year) && year >= 1900 && year <= new Date().getFullYear() + 1
-      );
-    }, "Valid year is required"),
-    price: z.string().min(1, "Price is required"),
-    mileage: z.string().min(1, "Mileage is required"),
-    color: z.string().min(1, "Color is required"),
-    fuelType: z.string().min(1, "Fuel type is required"),
-    transmission: z.string().min(1, "Transmission type is required"),
-    bodyType: z.string().min(1, "Body type is required"),
-    seats: z.string().optional(),
-    description: z.string().min(10, "Description is required"),
-    status: z.enum(["Available", "Unavailable", "Sold"]).default("Available"),
-    featured: z.boolean().default(false),
-  });
+  const router = useRouter();
 
   const {
     register,
     setValue,
-    getValues,
     formState: { errors },
     handleSubmit,
     watch,
@@ -99,67 +101,33 @@ const AddCarform = () => {
       featured: false,
     },
   });
+
+  // AI image drop handler
   const onAiDrop = (acceptedFiles) => {
     const file = acceptedFiles[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image size should be less than 5mb")
+        toast.error("Image size should be less than 5mb");
         return;
       }
-      setUploadedAiImages(true);
-      
+      setUploadedAiImages(file);
       const fileReader = new FileReader();
-      fileReader.onloadend = (e) => {
+      fileReader.onload = (e) => {
         setImagePreviews(e.target.result);
-        toast.success("Image uploaded successfully")
+        toast.success("Image uploaded successfully");
       };
-      
       fileReader.readAsDataURL(file);
     }
   };
-    const {
-    getRootProps: getAiRootProps,
-    getInputProps: getAiInputProps,
-  } = useDropzone({
-    onDrop: onAiDrop,
-    accept: {
-      "image/*": [".jpg", ".jpeg", ".png", ".gif", ".webp"],
-    },
-    multiple: false,
-    maxFiles:1,
-  });
-   const { data:addCarResult,loading:addCarLoading,fn:addCarFn } = UseFetch(addCar)
-   useEffect(()=>{
-    if(addCarResult?.success){
-      toast.success("Car added successfully");
-      Router.push("/admin/cars")
-    }
-   },[addCarResult,addCarLoading])
-  const onSubmit = async (data) => {
-    console.log("Form data:", data);
-    console.log("Uploaded images:", uploadedImages);
+  const { getRootProps: getAiRootProps, getInputProps: getAiInputProps } =
+    useDropzone({
+      onDrop: onAiDrop,
+      accept: { "image/*": [".jpg", ".jpeg", ".png", ".gif", ".webp"] },
+      multiple: false,
+      maxFiles: 1,
+    });
 
-    if (uploadedImages.length === 0) {
-      setImageError("Please upload at least one image");
-      return;
-    }
-
-    const carData = {
-      ...data,
-      year: parseInt(data.year),
-      price: parseInt(data.price),
-      mileage: parseInt(data.mileage),
-      seats:data.seats?parseInt(data.seats):null,
-      images: uploadedImages,
-    }
-    await addCarFn({
-      carData,
-      images:uploadedImages,
-    })
-
-    
-  };
-
+  // Multiple image drop handler
   const onMultiImageInputDrop = (acceptedFiles) => {
     const validFlags = acceptedFiles.filter((file) => {
       if (file.size > 5 * 1024 * 1024) {
@@ -168,38 +136,114 @@ const AddCarform = () => {
       }
       return true;
     });
-    if (validFlags.length == 0) return;
+    if (validFlags.length === 0) return;
 
     const newImages = [];
     validFlags.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         newImages.push(e.target.result);
-        if (newImages.length == validFlags.length) {
+        if (newImages.length === validFlags.length) {
           setUploadedImages((prev) => [...prev, ...newImages]);
           setImageError("");
-          toast.success(`Sucessfully uploaded ${newImages.length} images`);
+          toast.success(`Successfully uploaded ${newImages.length} images`);
         }
       };
-
       reader.readAsDataURL(file);
     });
   };
-  const {
-    getRootProps: getMultiImageRootProps,
-    getInputProps: getMultiImageInputProps,
-  } = useDropzone({
-    onDrop: onMultiImageInputDrop,
-    accept: {
-      "image/*": [".jpg", ".jpeg", ".png", ".gif", ".webp"],
-    },
-    multiple: true,
-  });
+  const { getRootProps: getMultiImageRootProps, getInputProps: getMultiImageInputProps } =
+    useDropzone({
+      onDrop: onMultiImageInputDrop,
+      accept: { "image/*": [".jpg", ".jpeg", ".png", ".gif", ".webp"] },
+      multiple: true,
+    });
 
+  // Remove image from selected images
   const removeImage = (index) => {
-   setUploadedImages((prev) => prev.filter((_, i) => i !== index));
-
+    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
   };
+
+  // UseFetch hook for AI processing
+  const {
+    loading: processCarImageLoading,
+    fn: processCarImageFn,
+    data: processCarImageResult,
+  } = UseFetch(processCarImageWithAI);
+
+  // Function to trigger AI processing
+  const processWithAI = async () => {
+    if (!uploadedAiImages) {
+      toast.error("Please upload an image");
+      return;
+    }
+    await processCarImageFn(uploadedAiImages);
+  };
+
+  // Populate form after AI extraction, switch to manual tab, clear AI upload UI
+// Populate form after AI extraction, switch to manual tab, keep image for DB
+useEffect(() => {
+  if (processCarImageResult?.data) {
+    const fieldMap = [
+      "make",
+      "model",
+      "year",
+      "price",
+      "mileage",
+      "color",
+      "fuelType",
+      "bodyType",
+      "transmission",
+      "seats",
+      "description",
+    ];
+    fieldMap.forEach((field) => {
+      if (
+        processCarImageResult.data[field] !== undefined &&
+        processCarImageResult.data[field] !== null
+      ) {
+        setValue(field, String(processCarImageResult.data[field]));
+      }
+    });
+
+    // ✅ Keep the AI-uploaded image for saving to DB
+    if (imagePreviews) {
+      setUploadedImages((prev) => [...prev, imagePreviews]);
+    }
+
+    // Switch to manual tab after filling
+    setActiveTab("manual");
+    setImagePreviews(null);
+    setUploadedAiImages(null);
+  }
+}, [processCarImageResult, setValue]);
+  // UseFetch hook for adding the car
+  const { data: addCarResult, loading: addCarLoading, fn: addCarFn } = UseFetch(addCar);
+
+  useEffect(() => {
+    if (addCarResult?.success) {
+      toast.success("Car added successfully");
+      router.push("/admin/cars");
+    }
+  }, [addCarResult, router]);
+
+  // Form submit handler
+  const onSubmit = async (data) => {
+    if (uploadedImages.length === 0) {
+      setImageError("Please upload at least one image");
+      return;
+    }
+    const carData = {
+      ...data,
+      year: parseInt(data.year),
+      price: parseInt(data.price),
+      mileage: parseInt(data.mileage),
+      seats: data.seats ? parseInt(data.seats) : null,
+      images: uploadedImages,
+    };
+    await addCarFn({ carData, images: uploadedImages });
+  };
+
   return (
     <Tabs
       defaultValue="ai"
@@ -216,15 +260,11 @@ const AddCarform = () => {
         <Card>
           <CardHeader>
             <CardTitle>Add New Car</CardTitle>
-            <CardDescription>
-              Enter the details of the car you want to add.
-            </CardDescription>
+            <CardDescription>Enter the details of the car you want to add.</CardDescription>
           </CardHeader>
-
           <CardContent>
             <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Make */}
                 <div className="space-y-2">
                   <Label htmlFor="make">Make</Label>
                   <input
@@ -237,12 +277,10 @@ const AddCarform = () => {
                     }`}
                   />
                   {errors.make && (
-                    <span className="text-sm text-red-500">
-                      {errors.make.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.make.message}</span>
                   )}
                 </div>
-                {/* Model */}
+
                 <div className="space-y-2">
                   <Label htmlFor="model">Model</Label>
                   <input
@@ -255,12 +293,10 @@ const AddCarform = () => {
                     }`}
                   />
                   {errors.model && (
-                    <span className="text-sm text-red-500">
-                      {errors.model.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.model.message}</span>
                   )}
                 </div>
-                {/* Year */}
+
                 <div className="space-y-2">
                   <Label htmlFor="year">Year</Label>
                   <input
@@ -273,12 +309,10 @@ const AddCarform = () => {
                     }`}
                   />
                   {errors.year && (
-                    <span className="text-sm text-red-500">
-                      {errors.year.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.year.message}</span>
                   )}
                 </div>
-                {/* Price */}
+
                 <div className="space-y-2">
                   <Label htmlFor="price">Price</Label>
                   <input
@@ -291,12 +325,10 @@ const AddCarform = () => {
                     }`}
                   />
                   {errors.price && (
-                    <span className="text-sm text-red-500">
-                      {errors.price.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.price.message}</span>
                   )}
                 </div>
-                {/* Mileage */}
+
                 <div className="space-y-2">
                   <Label htmlFor="mileage">Mileage</Label>
                   <input
@@ -309,12 +341,10 @@ const AddCarform = () => {
                     }`}
                   />
                   {errors.mileage && (
-                    <span className="text-sm text-red-500">
-                      {errors.mileage.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.mileage.message}</span>
                   )}
                 </div>
-                {/* Color */}
+
                 <div className="space-y-2">
                   <Label htmlFor="color">Color</Label>
                   <input
@@ -327,18 +357,17 @@ const AddCarform = () => {
                     }`}
                   />
                   {errors.color && (
-                    <span className="text-sm text-red-500">
-                      {errors.color.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.color.message}</span>
                   )}
                 </div>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="fuelType">Fuel Type</Label>
                   <Select
                     onValueChange={(value) => setValue("fuelType", value)}
-                    defaultValue={getValues("fuelType")}
+                    value={watch("fuelType")}
                   >
                     <SelectTrigger
                       className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 ${
@@ -356,19 +385,17 @@ const AddCarform = () => {
                     </SelectContent>
                   </Select>
                   {errors.fuelType && (
-                    <span className="text-sm text-red-500">
-                      {errors.fuelType.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.fuelType.message}</span>
                   )}
                 </div>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/*Body Type */}
                 <div className="space-y-2">
                   <Label htmlFor="bodyType">Body Type</Label>
                   <Select
                     onValueChange={(value) => setValue("bodyType", value)}
-                    defaultValue={getValues("bodyType")}
+                    value={watch("bodyType")}
                   >
                     <SelectTrigger
                       className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 ${
@@ -386,23 +413,19 @@ const AddCarform = () => {
                     </SelectContent>
                   </Select>
                   {errors.bodyType && (
-                    <p className="text-sm text-red-500">
-                      {errors.bodyType.message}
-                    </p>
+                    <p className="text-sm text-red-500">{errors.bodyType.message}</p>
                   )}
                 </div>
-                {/* Transmission */}
+
                 <div className="space-y-2">
                   <Label htmlFor="transmission">Transmission</Label>
                   <Select
                     onValueChange={(value) => setValue("transmission", value)}
-                    defaultValue={getValues("transmission")}
+                    value={watch("transmission")}
                   >
                     <SelectTrigger
                       className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 ${
-                        errors.transmission
-                          ? "border-red-500"
-                          : "border-gray-300"
+                        errors.transmission ? "border-red-500" : "border-gray-300"
                       }`}
                     >
                       <SelectValue placeholder="Select transmission" />
@@ -416,13 +439,10 @@ const AddCarform = () => {
                     </SelectContent>
                   </Select>
                   {errors.transmission && (
-                    <span className="text-sm text-red-500">
-                      {errors.transmission.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.transmission.message}</span>
                   )}
                 </div>
 
-                {/* Seats */}
                 <div className="space-y-2">
                   <Label htmlFor="seats">Seats</Label>
                   <input
@@ -435,18 +455,15 @@ const AddCarform = () => {
                     }`}
                   />
                   {errors.seats && (
-                    <span className="text-sm text-red-500">
-                      {errors.seats.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.seats.message}</span>
                   )}
                 </div>
 
-                {/* Status */}
                 <div className="space-y-2">
                   <Label htmlFor="status">Status</Label>
                   <Select
                     onValueChange={(value) => setValue("status", value)}
-                    defaultValue={getValues("status")}
+                    value={watch("status")}
                   >
                     <SelectTrigger
                       className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 ${
@@ -464,14 +481,11 @@ const AddCarform = () => {
                     </SelectContent>
                   </Select>
                   {errors.status && (
-                    <span className="text-sm text-red-500">
-                      {errors.status.message}
-                    </span>
+                    <span className="text-sm text-red-500">{errors.status.message}</span>
                   )}
                 </div>
               </div>
 
-              {/* Description */}
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <textarea
@@ -483,9 +497,7 @@ const AddCarform = () => {
                   }`}
                 />
                 {errors.description && (
-                  <span className="text-sm text-red-500">
-                    {errors.description.message}
-                  </span>
+                  <span className="text-sm text-red-500">{errors.description.message}</span>
                 )}
               </div>
 
@@ -502,23 +514,25 @@ const AddCarform = () => {
                   </p>
                 </div>
               </div>
+
               <div>
                 <Label
                   htmlFor="images"
-                  
-                  className={imageError ? "text-red-500" : "text-gray-700" }
+                  className={imageError ? "text-red-500" : "text-gray-700"}
                 >
                   Images {imageError && <span className="text-red-500 ">*</span>}
                 </Label>
 
-                <div {...getMultiImageRootProps()} className="border-2 border-dashed border-gray-300 rounded-md p-4 cursor-pointer transition duration-300 ease-in-out hover:bg-gray-100 mt-2">
+                <div
+                  {...getMultiImageRootProps()}
+                  className="border-2 border-dashed border-gray-300 rounded-md p-4 cursor-pointer transition duration-300 ease-in-out hover:bg-gray-100 mt-2"
+                >
                   <input {...getMultiImageInputProps()} />
                   <div className="flex flex-col items-center justify-center">
                     <Upload className="w-12 h-12 text-gray-400 mb-3" />
                     <p className="text-center text-gray-700">
                       Drag and drop or click to upload multiple images
                     </p>
-
                     <p className="text-gray-400 text-sm mt-2">
                       Supported formats: .jpg, .jpeg, .png (max 5MB)
                     </p>
@@ -531,64 +545,124 @@ const AddCarform = () => {
               </div>
               {uploadedImages.length > 0 && (
                 <div className="mt-4">
-                  <h3 className="text-lg font-medium mb-2">Uploaded Images ({uploadedImages.length})</h3>
+                  <h3 className="text-lg font-medium mb-2">
+                    Uploaded Images ({uploadedImages.length})
+                  </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {uploadedImages.map((image, index) => {
-                      return <div key={index} className="relative group">
+                    {uploadedImages.map((image, index) => (
+                      <div key={index} className="relative group">
                         <Image
-                        src={image}
-                        alt={`Car Image ${index+1}`}
-                        height={50}
-                        className="h-28 w-full object-cover rounded-md"
-                        priority
-                        width={50}
+                          src={image}
+                          alt={`Car Image ${index + 1}`}
+                          height={50}
+                          width={50}
+                          className="h-28 w-full object-cover rounded-md"
+                          priority
                         />
                         <Button
-                        type="button"
-                        size="icon"
-                        variant={"destructive"}
-                        className={"absolute top-2 right-2 bg-white/90 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity " } 
-                        onClick={() => removeImage(index)}
-                        ><X className="h-4 w-4" /></Button>
+                          type="button"
+                          size="icon"
+                          variant={"destructive"}
+                          className="absolute top-2 right-2 bg-white/90 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removeImage(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-})}
+                    ))}
                   </div>
                 </div>
               )}
 
-
-             <Button type="submit" className="w-full md:w-auto" disabled={addCarLoading}>
-               {addCarLoading ? (
-                 <>
-                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                   Adding car...
-                 </>
-               ) : (
-                 "Add Car"
-               )}
-             </Button>
+              <Button
+                type="submit"
+                className="w-full md:w-auto"
+                disabled={addCarLoading}
+              >
+                {addCarLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding car...
+                  </>
+                ) : (
+                  "Add Car"
+                )}
+              </Button>
             </form>
           </CardContent>
         </Card>
       </TabsContent>
+
       <TabsContent value="ai" className="mt-6">
         <Card>
           <CardHeader>
             <CardTitle>AI-Powered Car Details Extraction</CardTitle>
-            <CardDescription>Upload an image of a car and let AI extract details</CardDescription>
+            <CardDescription>
+              Upload an image of a car and let AI extract details
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              {/* Upload Section */}
               <div>
-                <div>
-                  
-                </div>
+                {imagePreviews ? (
+                  <div className="relative">
+                    <Image
+                      src={imagePreviews}
+                      alt="Uploaded Car"
+                      width={300}
+                      height={200}
+                      className="rounded-md shadow"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="absolute top-2 right-2"
+                      onClick={() => {
+                        setImagePreviews(null);
+                        setUploadedAiImages(null);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    {...getAiRootProps()}
+                    className="border-2 border-dashed border-gray-300 rounded-md p-4 cursor-pointer transition duration-300 ease-in-out hover:bg-gray-100"
+                  >
+                    <input {...getAiInputProps()} />
+                    <div className="flex flex-col items-center">
+                      <Upload className="w-12 h-12 text-gray-400 mb-2" />
+                      <p className="text-center text-gray-700">
+                        Drag and drop or click to upload
+                      </p>
+                      <p className="text-gray-400 text-sm mt-2">
+                        Supported formats: .jpg, .jpeg, .png (max 5MB)
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
+              {/* Process with AI button */}
+              {uploadedAiImages && (
+                <Button
+                  className="w-full"
+                  onClick={processWithAI}
+                  disabled={processCarImageLoading}
+                >
+                  {processCarImageLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing with AI...
+                    </>
+                  ) : (
+                    "Extract Details with AI"
+                  )}
+                </Button>
+              )}
             </div>
           </CardContent>
-          <CardFooter>
-            <p>Card Footer</p>
-          </CardFooter>
         </Card>
       </TabsContent>
     </Tabs>

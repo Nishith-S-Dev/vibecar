@@ -39,7 +39,8 @@ export async function processCarImageWithAI(file){
             7. Fuel Type (your best guess)
             8. Transmission type (your best guess)
             9. Price (your best guess)
-            10.Short Description as to be added to a car listing
+            10. Seats (estimate if visible)
+            11. Short Description as to be added to a car listing
 
 
             Format your response as a clean JSON object with these fields:
@@ -54,6 +55,7 @@ export async function processCarImageWithAI(file){
             "bodyType":"",
             "fuelType":"",
             "transmission":"",
+            "seats":"",
             "description":"",
             "confidence":0.00
             }
@@ -62,7 +64,7 @@ export async function processCarImageWithAI(file){
             only respond with the JSON object , nothing else
 
             `;
-            const result = await model.generateContent([imagePart],prompt);
+            const result = await model.generateContent([prompt, imagePart]);
             const response = await result.response;
             const text = response.text();
             const cleanedText =text.replace(/```(?:json)?\n?/g,"").trim();
@@ -78,6 +80,7 @@ export async function processCarImageWithAI(file){
                     "mileage",
                     "fuelType",
                     "transmission",
+                    "seats",
                     "description",
                     "confidence",
                 ];
@@ -87,7 +90,7 @@ export async function processCarImageWithAI(file){
                     throw new Error(`AI response is missing required fields: ${missingFiedls.join(", ")}`);
                 }
                 return {
-                    sucess:true,
+                    success:true,
                     data: carDetails,
                 }
             }catch(error){
