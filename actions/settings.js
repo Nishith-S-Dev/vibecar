@@ -150,18 +150,39 @@ export  async function getUsers(){
     try{
         // to validate the user is logged in
         const {userId} = await auth();
+        console.log("AUTH userId:", userId);
         if(!userId) throw new Error("Unauthorized");
         const user = await db.user.findUnique({
             where: {
                 clerkUserId: userId
             }
         })
-        if(!user || user.role !== "ADMIN") throw new Error("User not found");
+        console.log("DB user:", user);
+        if(!user){
+            // fetch Clerk user details and create in DB if missing
+            const clerkUserRes = await fetch(`https://api.clerk.dev/v1/users/${userId}`, {
+                headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` }
+            });
+            const clerkUser = await clerkUserRes.json();
+            console.log("Clerk user fetched:", clerkUser);
+
+            await db.user.create({
+                data: {
+                    clerkUserId: userId,
+                    name: clerkUser.first_name + " " + clerkUser.last_name,
+                    email: clerkUser.email_addresses[0].email_address,
+                    role: "ADMIN" // default role
+                }
+            });
+        } else if(user.role !== "ADMIN"){
+            throw new Error("User not found");
+        }
         const users = await db.user.findMany({
             orderBy: {
                 createdAt: "desc",
             },
         });
+        console.log("All users in DB:", users);
         return users.map((user) => {
             return {
                 ...user,
@@ -175,30 +196,34 @@ export  async function getUsers(){
     }
 }
 
-export async function updateUserRole(userId,role){
-    try{
+export async function updateUserRole(userId, role) {
+    try {
         // to validate the user is logged in
-        const {userId:adminId} = await auth();
-        if(!userId) throw new Error("Unauthorized");
-        const user = await db.user.findUnique({
+        const { userId: adminId } = await auth();
+        if (!adminId) throw new Error("Unauthorized");
+        const adminUser = await db.user.findUnique({
             where: {
                 clerkUserId: adminId
             }
-        })
-        if(!user || user.role !== "ADMIN") throw new Error("User not found");
+        });
+        if (!adminUser || adminUser.role !== "ADMIN") throw new Error("Unauthorized - only admins can update roles");
+
+        console.log("🔎 Updating role for clerkUserId:", userId);
+
+        const existing = await db.user.findUnique({ where: { clerkUserId: userId } });
+        if (!existing) {
+            throw new Error("User not found in DB with clerkUserId: " + userId);
+        }
+
         const updatedUser = await db.user.update({
-            where: {
-                id: userId,
-            },
-            data: {
-                role,
-            },
+            where: { clerkUserId: userId },
+            data: { role },
         });
         revalidatePath("/admin/settings");
         return {
-            success:true
-        }
-    }catch(error){
+            success: true
+        };
+    } catch (error) {
         throw new Error("Error updating user role: " + error.message);
     }
 }
