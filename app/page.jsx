@@ -8,8 +8,11 @@ import Image from "next/image";
 import { carMakes } from "@/lib/data";
 import { SignedOut } from "@clerk/nextjs";
 import { Accordion,AccordionItem,AccordionTrigger,AccordionContent } from "@/components/ui/accordion";
+import { getFeaturedCars } from "@/actions/home";
 
-export default function Home() {
+export default async function Home() {
+
+   const featuredCars = await getFeaturedCars()
   return (
     <div className="pt-20 flex flex-col">
       {/* {hero} */}

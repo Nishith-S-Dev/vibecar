@@ -1,11 +1,13 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import UseFetch from "@/hooks/use-fetch";
 import { Input } from "./ui/input";
 import { Camera, Upload } from "lucide-react";
 import { Button } from "./ui/button";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { processImageSearch } from "@/actions/home";
 
 const HomeSearch = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -16,14 +18,38 @@ const HomeSearch = () => {
 
   const router = useRouter();
 
+  const{
+    loading:isProcessing,
+    fn:processImageFn,
+    data:processResult,
+    error:processError
+  }=UseFetch(processImageSearch)
+
   const handleImageSearch = async (e) => {
     e.preventDefault();
     if (!searchImage) {
       toast.error("Please you need to upload an image");
       return;
     }
-    // Add your image search logic here
+    await processImageFn(searchImage);
   };
+
+  useEffect(()=>{
+    if(processError){
+      toast.error("Failed to analyze Image"+(processError.message || "unknown Error"))
+    }
+  },[processError])
+  
+  useEffect(()=>{
+    if(processResult?.success){
+      const params = new URLSearchParams();
+
+      if(processResult.data.make) params.set("make", processResult.data.make);
+      if(processResult.data.bodyType) params.set("bodyType", processResult.data.bodyType);
+      if(processResult.data.color) params.set("color", processResult.data.color);
+      router.push(`/cars?${params.toString()}`);
+    }
+  },[processResult])
 
   const handleTextSubmit = (e) => {
     e.preventDefault();
@@ -102,6 +128,19 @@ const HomeSearch = () => {
                     alt="car preview"
                     className="max-h-56 max-w-full object-contain mb-4"
                   />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full mb-3"
+                    size="sm"
+                    onClick={() => {
+                      setImagePreview("");
+                      setSearchImage(null);
+                      toast.success("Image removed successfully");
+                    }}
+                  >
+                    Remove Image
+                  </Button>
                 </div>
               ) : (
                 <div {...getRootProps()}>
@@ -122,8 +161,8 @@ const HomeSearch = () => {
               )}
             </div>
             {imagePreview && (
-              <Button type="submit" className="w-full" disabled={isUploading}>
-                {isUploading ? "uploading..." : "Search with this image"}
+              <Button type="submit" className="w-full" disabled={isUploading|| isProcessing}>
+                {isUploading ? "uploading..." :isProcessing?"Analzying Image": "Search with this image"}
               </Button>
             )}
           </form>
