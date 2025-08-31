@@ -17,12 +17,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Filter } from "lucide-react";
+import { Filter, Sliders, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 // If you have CarFilterControls UI for more filters:
-import CarFilterControls from "./filter-controls";
+import { CarFilterControls } from "./filter-controls";
 
-const CarFilters = ({ filters }) => {
+export const CarFilters = ({ filters }) => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -90,8 +90,10 @@ const CarFilters = ({ filters }) => {
     bodyType,
     transmission,
     fuelType,
-    priceRangeMin: priceRange.min,
-    priceRangeMax: priceRange.max,
+    priceRange: {
+      min: priceRange.min,
+      max: priceRange.max,
+    },
   };
 
   // Filter setter for advanced controls
@@ -257,10 +259,35 @@ const CarFilters = ({ filters }) => {
 
       <div className="hidden lg:block sticky top-24">
         <div className="border rouneded-lg overflow-hidden bg-white"></div>
+            <div className="p-4 border-b bg-gray-400 flex justify-between ali items-center">
+              <h3 className="font-medium flex items">
+                <Sliders className="mr-2 h-4 w-4"/>
+                  Filter
+              </h3>
+              {activeFilterCount>0 && (
+                <Button variant={'ghost'} className={"h-8 text-sm text-gray-600"} onClick={clearFilters}>
+                <X className="mr-1 h-3 w-3"/>
+                Clear All 
+                </Button>
+              )}
+            </div>
+            <div className="py-6">
+                <CarFilterControls
+                  filters={filters}
+                  currentFilters={currentFilters}
+                  onFilterChange={handleFilterChange}
+                  onClearFilter={handleClearFilter}
+                />
+              </div>
+              <div className="py-4 px-4 border-t">
+                <Button onClick={applyFilters} className={"w-full"}>
+                  Show Result
+                </Button>
 
-      </div>
+              </div>
+      </div>  
     </div>
-  );
+  );  
 };
 
 export default CarFilters;

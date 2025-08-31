@@ -1,3 +1,4 @@
+"use server"
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
@@ -49,8 +50,7 @@ export  async function getCarFilters(){
     return {
         success:true,
         data:{
-
-            makes:{makes:makes.map((item)=>item.make)},
+            makes: makes.map((item)=>item.make),
             bodyType:bodyType.map((item)=>item.bodyType),
             fuelType:fuelType.map((item)=>item.fuelType),
             transmission:transmission.map((item)=>item.transmission),
@@ -144,7 +144,7 @@ const cars = await db.car.findMany({
 
 let wishlisted = new Set();
 if(dbUser){
-    const savedCars = await db.savedCar.findMany({
+    const savedCars = await db.userSavedCar.findMany({
         where:{userId:dbUser.id},
         select:{carId:true}
     });
@@ -153,7 +153,9 @@ if(dbUser){
 
 const serializedCars = cars.map((car) => ({
     ...car,
-    isWishlisted: wishlisted.has(car.id)
+    price: car.price ? parseFloat(car.price.toString()) : null,
+    mileage: car.mileage ? parseFloat(car.mileage.toString()) : null,
+    isWishlisted: wishlisted.has(car.id),
 }));
 return{
     success:true,
@@ -193,7 +195,7 @@ export async function toggleSavedCar(cardId){
             }
         };
 
-        const existingSavedCar = await db.savedCar.findUnique({
+        const existingSavedCar = await db.userSavedCar.findUnique({
             where: {
                 userId_carId: {
                     userId:user.id,
@@ -202,7 +204,7 @@ export async function toggleSavedCar(cardId){
             }
         });
         if(existingSavedCar){
-            await db.savedCar.delete({
+            await db.userSavedCar.delete({
                 where: {
                     userId_carId: {
                         userId:user.id,
@@ -218,7 +220,7 @@ export async function toggleSavedCar(cardId){
             }
         }
 
-        await db.savedCar.create({
+        await db.userSavedCar.create({
             data: {
                 userId:user.id,
                 carId:car.id
