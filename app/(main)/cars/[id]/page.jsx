@@ -1,17 +1,34 @@
-// app/(main)/cars/[id]/page.jsx
-const Carpage = async ({ params }) => {
+import React from 'react'
+import { getCarById } from '@/actions/car-listing';
+import { db } from '@/lib/prisma';
+
+export async function generateMetadata({ params }) {
   const { id } = await params;
+  const result = await getCarById(id);
 
+  if (!result.success) {
+    return {
+      title: "Car not found | Vehiql",
+      description: "The requested car could not be found",
+    };
+  }
+
+  const car = result.data;
+  return {
+    title: `${car.year} ${car.make} ${car.model} | Vehiql`,
+    description: `View details of the ${car.year} ${car.make} ${car.model}`,
+    openGraph: {
+      title: `${car.year} ${car.make} ${car.model} | Vehiql`,
+      description: `View details of the ${car.year} ${car.make} ${car.model}`,
+      images: car.images?.[0] ? [car.images[0]] : [],
+    },
+  };
+}
+
+const CarDetailsPage = () => {
   return (
-    <div>
-      <h1>Car Page</h1>
-      <p>Car ID: {id}</p>
-      <div>
-        {/* This will display "hello" when you visit /cars/hello */}
-        <h2>You are viewing: {id}</h2>
-      </div>
-    </div>
-  );
-};
+    <div>CarDetailsPage</div>
+  )
+}
 
-export default Carpage;
+export default CarDetailsPage
