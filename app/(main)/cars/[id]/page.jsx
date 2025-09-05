@@ -1,6 +1,8 @@
 import React from 'react'
 import { getCarById } from '@/actions/car-listing';
 import { db } from '@/lib/prisma';
+import { notFound } from 'next/navigation';
+import CarDetails from './components/car-details';
 
 export async function generateMetadata({ params }) {
   const { id } = await params;
@@ -25,9 +27,17 @@ export async function generateMetadata({ params }) {
   };
 }
 
-const CarDetailsPage = () => {
+const CarDetailsPage = async({params}) => {
+  const {id} = await params;
+  const result = await getCarById(id);
+  if(!result.success)
+  {
+    notFound();
+  }
   return (
-    <div>CarDetailsPage</div>
+    <div>
+      <CarDetails car={result.data} testDriveInfo={result.testDriveInfo} />
+    </div>
   )
 }
 
